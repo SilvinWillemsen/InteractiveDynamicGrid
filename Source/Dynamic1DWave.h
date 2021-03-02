@@ -31,7 +31,11 @@ public:
     void addRemovePoint();
 
     void calculateInterpolatedPoints();
+    void lowPassConnection();
+    
     void calculateScheme();
+    void displacementCorrection();
+
     void updateStates();
     
     double getOutput (double ratio) { int idx = floor(Nint * ratio);
@@ -43,11 +47,18 @@ public:
     
     void excite();
     
+    void changeWavespeed (double val) { cToUse = val; }; // c is only used once per sample (before everything else)
+    void updateParams() { c = cToUse; };
+    
+    void saveToFiles();
+    void closeFiles();
 private:
     double k;        // One over the samplerate
     int Nint, NintPrev, M, Mw; // integer number of points
     
     double N, c, lambdaSq, h, L;
+    
+    double cToUse;
     
     double alf, alfTick;
     
@@ -64,5 +75,9 @@ private:
     std::vector<double> quadIp;
     std::vector<double> customIp;
     
+    double lpExponent = 10;
+    
+    std::ofstream uState, wState, alfSave, MSave, MwSave;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Dynamic1DWave)
 };

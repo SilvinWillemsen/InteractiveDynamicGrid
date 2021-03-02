@@ -25,6 +25,7 @@ MainComponent::~MainComponent()
     // This shuts down the audio device and clears the audio source.
     Timer::stopTimer();
     shutdownAudio();
+
 }
 
 //==============================================================================
@@ -37,16 +38,27 @@ void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRat
     // but be careful - it will be called on the audio thread, not the GUI thread.
 
     // For more details, see the help for AudioProcessor::prepareToPlay()
+    fs = sampleRate;
+
+    if (Global::useCVec)
+        cVec = Global::linspace(294, 588, fs);
+    
     NamedValueSet parameters;
-    parameters.set ("c", 1470 * 0.5);
+    parameters.set ("c", Global::useCVec ? cVec[0] : 600);
     parameters.set ("L", 1);
     
-    fs = sampleRate;
     dynamic1DWave = std::make_unique<Dynamic1DWave>(parameters, 1.0 / fs);
-    addAndMakeVisible (dynamic1DWave.get());
-    
+    double test = static_cast<double>(*parameters.getVarPointer("L")) * fs / (Global::maxN);
+    waveSpeedSlider.setRange (test, 2000.0);
+    waveSpeedSlider.setValue (*parameters.getVarPointer("c"));
+    waveSpeedSlider.addListener (this);
+
     Timer::startTimerHz (15);
     setSize (800, 600);
+    
+    addAndMakeVisible (waveSpeedSlider);
+    addAndMakeVisible (dynamic1DWave.get());
+
 
 }
 
@@ -65,15 +77,35 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
     float* const channelData2 = bufferToFill.buffer->getWritePointer (1, bufferToFill.startSample);
     
     float output = 0.0;
+    
+    // only update params once a buffer
+//    dynamic1DWave->updateParams();
+    
     for (int i = 0; i < bufferToFill.numSamples; ++i)
     {
+
+        if (Global::useCVec && n < cVec.size())
+            dynamic1DWave->changeWavespeed(cVec[n]);
+        
+        dynamic1DWave->updateParams();
         dynamic1DWave->calculate();
+//        if (n < 22050)
+//        {
+//            dynamic1DWave->saveToFiles();
+//        }
+//        else
+//        {
+//            std::cout << "done" << std::endl;
+//            dynamic1DWave->closeFiles();
+//        }
         dynamic1DWave->updateStates();
         
-        output = dynamic1DWave->getOutput (0.8); // get output at 0.8L of the string
+        output = dynamic1DWave->getOutput (0.2); // get output at 0.8L of the string
 //        std::cout << output << std::endl;
         channelData1[i] = limit (output);
         channelData2[i] = limit (output);
+        
+        ++n;
     }
 }
 
@@ -100,8 +132,9 @@ void MainComponent::resized()
     // This is called when the MainContentComponent is resized.
     // If you add any child components, this is where you should
     // update their positions.
-    
-    dynamic1DWave->setBounds (getLocalBounds());
+    Rectangle<int> totArea = getLocalBounds();
+    waveSpeedSlider.setBounds (totArea.removeFromBottom(Global::sliderHeight));
+    dynamic1DWave->setBounds (totArea);
 }
 
 // limiter
@@ -123,4 +156,10 @@ double MainComponent::limit (double val)
 void MainComponent::timerCallback()
 {
     repaint();
+}
+
+void MainComponent::sliderValueChanged (Slider* slider)
+{
+    if (slider == &waveSpeedSlider && !Global::useCVec)
+        dynamic1DWave->changeWavespeed (slider->getValue());
 }
